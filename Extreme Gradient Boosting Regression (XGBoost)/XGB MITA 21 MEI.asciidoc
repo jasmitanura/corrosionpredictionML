@@ -1,0 +1,952 @@
++*In[44]:*+
+[source, ipython3]
+----
+# Import Library
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import math
+import pydot
+import time
+import xgboost as xgb
+from xgboost import XGBRegressor
+from sklearn import metrics
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_predict
+from sklearn.tree import export_graphviz
+----
+
+
++*In[45]:*+
+[source, ipython3]
+----
+#Import Dataset
+df = pd.read_csv("DATASETJASMITAbismillah.csv")
+df.head()
+----
+
+
++*Out[45]:*+
+----
+[cols=",,,,,,,",options="header",]
+|===
+| |T |RH |TOW |Prec |SO2 |H+ |CR
+|0 |9.5 |79 |2830 |639.3 |77.5 |0.0000 |14.89
+|1 |10.3 |74 |2555 |380.8 |58.1 |0.0221 |6.98
+|2 |9.1 |73 |2627 |684.3 |41.2 |0.0714 |7.78
+|3 |9.8 |77 |3529 |581.1 |32.1 |0.0342 |5.69
+|4 |7.0 |77 |3011 |850.2 |19.7 |0.0000 |8.95
+|===
+----
+
+
++*In[46]:*+
+[source, ipython3]
+----
+#Define Features and Target
+feature= df.drop('CR', axis=1)
+target= df['CR']
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+#GridSearching for the best Hyperparameter
+
+tic = time.perf_counter() # start timer
+
+# Gridsearching for Gradient Boosting with KFold feature
+XGB=XGBRegressor(random_state=726)
+
+# KFold in this GridSearch is shuffled
+kfxgb = KFold(n_splits=10, shuffle=True, random_state=726)
+
+# hyperparameter tuning using gridsearch
+search_grid={'n_estimators':[100,200,300,500,750,1000], 
+             'learning_rate':[0.01,0.015,0.02,0.05,0.1],
+             'max_depth':[3,5,7,9],
+             'min_child_weight':[1,3,5],
+             'gamma': [0.0,0.25,0.5,0.75],      
+            }
+
+gridsearch=GridSearchCV(estimator=XGB,
+                        param_grid=search_grid,
+                        cv=kfxgb,
+                        scoring=['neg_mean_squared_error','r2','neg_mean_absolute_error'],
+                        refit='neg_mean_squared_error',
+                        return_train_score=True,                        
+                       )
+
+gridsearch.fit(fitur, target)
+print('Best hyperparameters: {}'.format(gridsearch.best_params_))
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# Hyperparameter's MSE Visualization
+tic = time.perf_counter() # start timer
+XGB1=XGBRegressor(learning_rate=0.05,
+                  random_state=726,
+                  max_depth=3,
+                  )
+
+n_est={'n_estimators':[2,3,4,5,6,7,8,9,10,15,20,25,30,45,50,65,75,80,100,140,200,250,300,350,400,450]}
+
+n_est_search=GridSearchCV(estimator=XGB1,
+                        param_grid=n_est,
+                        cv=kfxgb,
+                        scoring=['neg_mean_squared_error','r2','neg_mean_absolute_error'],
+                        refit='neg_mean_squared_error',
+                        return_train_score=True,                        
+                       )
+
+n_est_search.fit(fitur, target)
+print('Best hyperparameters: {}'.format(n_est_search.best_params_))
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+tic = time.perf_counter() # start timer
+
+# plot number of trees vs train and test MSE
+n_est_array = n_est["n_estimators"]                                       # array of grid points (x-axis)
+train_mse = n_est_search.cv_results_["mean_train_neg_mean_squared_error"] # MSE of training set at each grid point (y-axis)
+test_mse = n_est_search.cv_results_["mean_test_neg_mean_squared_error"]   # MSE of test set at each grid point (y-axis)
+
+fig1,ax1 = plt.subplots(figsize=(8,4))
+#ax1.scatter(n_est_array, -train_mse) alternative plot
+plt.plot(n_est_array, -train_mse, '--o', linewidth=1)
+#ax1.scatter(n_est_array, -test_mse) alternative plot
+plt.plot(n_est_array, -test_mse, '--o', linewidth=1)
+ax1.fill_between(n_est_array, -train_mse, -test_mse, alpha=0.05, color='r')
+
+ax1.set_xlabel('Number of Trees')
+ax1.set_ylabel('Mean Squared Error')
+ax1.set_title("Gradient Boosting - Hyperparameter's MSE - n_estimators")
+plt.legend(["Train Data","Validated Test Data"])
+plt.savefig("Gradient Boosting - Hyperparameter's MSE - n_estimators.png")
+plt.show()
+
+print("Lowest Mean Squared Error of Validated Test Data:", round(min(-test_mse),4))
+print("Number of Trees with lowest MSE:", n_est_array[py.argmin(-test_mse)], 'trees')
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+tic = time.perf_counter() # start timer
+
+XGB1=XGBRegressor(n_estimators=140,
+                  random_state=726,
+                  max_depth=3,
+                  )
+
+learn_rate={'learning_rate':[0.01,0.02,0.03,0.04,0.05,0.1,0.15]}
+
+learn_rate_search=GridSearchCV(estimator=XGB1,
+                        param_grid=learn_rate,
+                        cv=kfxgb,
+                        scoring=['neg_mean_squared_error','r2','neg_mean_absolute_error'],
+                        refit='neg_mean_squared_error',
+                        return_train_score=True,                        
+                       )
+
+learn_rate_search.fit(fitur, target)
+print('Best hyperparameters: {}'.format(learn_rate_search.best_params_))
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+tic = time.perf_counter() # start timer
+
+# plot number of trees vs train and test MSE
+learn_rate_array = learn_rate["learning_rate"]                                 # array of grid points (x-axis)
+train_mse = learn_rate_search.cv_results_["mean_train_neg_mean_squared_error"] # MSE of training set at each grid point (y-axis)
+test_mse = learn_rate_search.cv_results_["mean_test_neg_mean_squared_error"]   # MSE of test set at each grid point (y-axis)
+
+fig1,ax1 = plt.subplots(figsize=(8,4))
+#ax1.scatter(learn_rate_array, -train_mse) alternative plot
+plt.plot(learn_rate_array, -train_mse, '--o', linewidth=1)
+#ax1.scatter(learn_rate_array, -test_mse) alternative plot
+plt.plot(learn_rate_array, -test_mse, '--o', linewidth=1)
+ax1.fill_between(learn_rate_array, -train_mse, -test_mse, alpha=0.05, color='r')
+
+ax1.set_xlabel('Learning Rate')
+ax1.set_ylabel('Mean Squared Error')
+ax1.set_title("Gradient Boosting - Hyperparameter's MSE - learning_rate")
+plt.legend(["Train Data","Validated Test Data"])
+plt.savefig("Gradient Boosting - Hyperparameter's MSE - learning_rate.png")
+plt.show()
+
+print("Lowest Mean Squared Error of Validated Test Data:", round(min(-test_mse),4))
+print("Learning Rate with lowest MSE:", learn_rate_array[py.argmin(-test_mse)], 'rate')
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+tic = time.perf_counter() # start timer 
+XGB1=XGBRegressor(n_estimators=140,
+                  random_state=726,
+                  learning_rate=0.05,
+                  )
+
+max_depth={'max_depth':[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}
+
+max_depth_search=GridSearchCV(estimator=GB1,
+                        param_grid=max_depth,
+                        cv=kfxgb,
+                        scoring=['neg_mean_squared_error','r2','neg_mean_absolute_error'],
+                        refit='neg_mean_squared_error',
+                        return_train_score=True,                        
+                       )
+
+max_depth_search.fit(fitur, target)
+print('Best hyperparameters: {}'.format(max_depth_search.best_params_))
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+tic = time.perf_counter() # start timer
+
+# plot number of trees vs train and test MSE
+
+max_depth_array = max_depth["max_depth"]                                      # array of grid points (x-axis)
+train_mse = max_depth_search.cv_results_["mean_train_neg_mean_squared_error"] # MSE of training set at each grid point (y-axis)
+test_mse = max_depth_search.cv_results_["mean_test_neg_mean_squared_error"]   # MSE of test set at each grid point (y-axis)
+
+fig1,ax1 = plt.subplots(figsize=(8,4))
+#ax1.scatter(max_depth_array, -train_mse) alternative plot
+plt.plot(max_depth_array, -train_mse, '--o', linewidth=1)
+#ax1.scatter(max_depth_array, -test_mse) alternative plot
+plt.plot(max_depth_array, -test_mse, '--o', linewidth=1)
+ax1.fill_between(max_depth_array, -train_mse, -test_mse, alpha=0.05, color='r')
+
+ax1.set_xlabel('Maximum Depth')
+ax1.set_ylabel('Mean Squared Error')
+ax1.set_title("Gradient Boosting - Hyperparameter's MSE - max_depth")
+plt.legend(["Train Data","Validated Test Data"])
+plt.savefig("Gradient Boosting - Hyperparameter's MSE - max_depth.png")
+plt.show()
+
+print("Lowest Mean Squared Error of Validated Test Data:", round(min(-test_mse),4))
+print("Maximum Depth of Tree with lowest MSE: ", max_depth_array[py.argmin(-test_mse)], 'depth')
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*In[65]:*+
+[source, ipython3]
+----
+# Dataset Training and Validation Testing
+tic = time.perf_counter() # start timer
+
+kfd=KFold(n_splits=10, shuffle=True, random_state=715)
+
+for train_index, test_index in kfd.split(fitur,target):
+    print("Train Data:", df.loc[train_index], "Test Data:", df.loc[test_index])
+    X_train, X_test=fitur.loc[train_index], fitur.loc[test_index]
+    y_train, y_test=target.loc[train_index], target.loc[test_index]
+
+XGB=XGBRegressor(n_estimators=850,
+                 random_state=715,
+                 learning_rate=0.05,
+                 max_depth=3,
+                 min_child_weight=1,
+                 gamma=0.5,
+                 reg_alpha=1,
+                 subsample=0.5,
+                 reg_lambda=1,
+                 )
+
+XGB.fit(X_train, y_train)
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*Out[65]:*+
+----
+Train Data:         T  RH   TOW   Prec   SO2      H+    CR
+1    10.3  74  2555  380.8  58.1  0.0221  6.98
+2     9.1  73  2627  684.3  41.2  0.0714  7.78
+3     9.8  77  3529  581.1  32.1  0.0342  5.69
+4     7.0  77  3011  850.2  19.7  0.0000  8.95
+5     7.4  76  3405  703.4  25.6  0.0450  7.99
+..    ...  ..   ...    ...   ...     ...   ...
+163  -0.9  77     0  604.0   3.0  0.0000  4.30
+164   2.5  70     0  626.0   3.0  0.0000  4.64
+166  -0.7  76     0  558.0  10.0  0.0000  6.35
+169   5.0  79     0  570.0  14.0  0.0000  7.41
+170   9.0  81     0  700.0   3.0  0.0000  7.03
+
+[153 rows x 7 columns] Test Data:         T  RH   TOW    Prec   SO2      H+     CR
+0     9.5  79  2830   639.3  77.5  0.0000  14.89
+10    8.9  71  2866   431.6  49.0  0.0580  11.74
+15    3.1  78  2810   801.3   6.3  0.0000   8.92
+16    3.9  80  3342   670.7   1.8  0.0271   7.70
+27   11.6  65  2359   779.0   9.6  0.0000   4.10
+29   10.7  79  4437   619.1  16.3  0.0291   9.07
+39    7.1  84  4545  1552.4   3.2  0.0018   7.20
+49   11.1  82  5141   789.9   5.8  0.0038   6.34
+51    7.7  68  2471   440.1   6.0  0.0156   6.70
+56    7.6  78  3959   531.0  16.8  0.0000  10.36
+71   15.7  68  2766   223.9   7.8  0.0002   2.30
+91   11.2  61  1391   967.4  55.2  0.0838  11.02
+111  20.4  69  3872  1440.0   5.0  0.0000  12.82
+145  17.2  33   175    34.0   5.0  0.0000   1.58
+154  14.2  71  3469   355.0  20.0  0.0000  12.89
+165   3.6  67     0   595.0   3.0  0.0000   4.32
+167 -15.5  68     0   306.0   3.0  0.0000   1.24
+168  -0.4  71     0   403.0   4.0  0.0000   3.84
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+22   10.2  80  4390   499.7  11.00  0.0358   7.85
+26   11.4  64  3563   561.2  12.60  0.0183   5.18
+32   10.3  78  4201   707.3  41.60  0.0211  15.34
+36   10.9  78  4632   889.3  16.20  0.0247   7.06
+40    7.4  83  4375  1503.0   2.40  0.0000   3.74
+43    9.5  82  4808   872.8   7.40  0.0040   7.92
+68   14.1  66  2762   398.0  18.40  0.0000   7.74
+70   14.3  67  2319   360.1   8.20  0.0003   3.53
+73   15.5  61  2147   610.4  13.50  0.0006   3.89
+96   17.0  74  4862  1420.0   9.00  0.0000  10.15
+118  27.0  76  2891   900.0   0.33  0.0000  27.00
+128  17.2  62  2768   374.0   1.90  0.0000   1.94
+142  18.0  62  1410   374.0  10.90  0.0000  21.24
+148  25.4  84  5037  1523.0   5.00  0.0000   7.06
+159 -13.2  71     0   293.0  10.00  0.0000   3.07
+162  -6.2  72     0   624.0   5.00  0.0000   5.47
+164   2.5  70     0   626.0   3.00  0.0000   4.64
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+5     7.4  76  3405  703.4  25.6  0.0450   7.99
+..    ...  ..   ...    ...   ...     ...    ...
+165   3.6  67     0  595.0   3.0  0.0000   4.32
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+2     9.1  73  2627   684.3  41.20  0.0714   7.78
+12    6.4  80  4127   657.0  13.90  0.0392   8.42
+19    6.8  80  4017   665.6  15.30  0.0554   9.29
+46   10.0  82  5084   749.2   8.30  0.0021  11.09
+50    8.8  70  2864   526.6   7.90  0.0326   5.69
+59    7.5  73  3160   580.6   4.20  0.0231   4.25
+61    8.7  70  3074   473.2  10.30  0.0366   5.62
+62    7.0  70  2580   577.0   4.70  0.0430   3.53
+65    7.6  77  3469   342.3   2.00  0.0430   6.70
+85    5.2  80  3386  1022.8   3.30  0.0461   6.19
+88   15.5  64  2644   982.3  10.10  0.0349   9.72
+110  26.1  88  5974  2395.0   5.00  0.0000   7.92
+124  10.6  65  2374   495.0   1.18  0.0000   2.88
+126  18.1  65  3416   554.0   8.30  0.0000   1.94
+141  18.0  51  1410   374.0  31.10  0.0000  10.01
+146  12.2  67  2847   632.0   0.00  0.0000   3.89
+169   5.0  79     0   570.0  14.00  0.0000   7.41
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec   SO2      H+     CR
+8     9.6  73  2480   426.4  83.3  0.0000  16.41
+14    6.0  80  3607   698.1   2.6  0.0334   4.68
+17    3.4  81  2994   609.7   0.9  0.0201   6.62
+21    6.6  76  3288   649.2   5.5  0.0139   5.62
+33   11.8  80  4930   912.9  30.2  0.0334   7.85
+38    7.3  82  4201  1183.1   6.1  0.0171   7.27
+48   10.1  81  4688   679.6   9.3  0.0113  11.38
+54    5.9  75  3341  1188.6   0.7  0.0374  10.58
+79    5.6  71  1514   666.7  16.4  0.0008   4.61
+83    5.0  79  3431  1103.0   3.0  0.0420   6.26
+86   14.6  69  3178   846.7   9.6  0.0000  10.72
+89   15.8  68     0  1037.6   9.3  0.0482   4.75
+97   20.6  76  5825  2158.0   5.0  0.0000  14.76
+102  18.3  51   867    93.0   5.0  0.0000   1.58
+129  16.3  59  1323   416.0  10.3  0.0000   1.01
+134   7.8  52   876   681.0   9.0  0.0000   3.10
+139  21.0  56  1857  1724.0   9.9  0.0000  14.33
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+5     7.4  76  3405  703.4  25.6  0.0450   7.99
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+1    10.3  74  2555   380.8  58.10  0.0221   6.98
+20    6.2  78  3360   702.4   4.80  0.0221   5.69
+24    9.5  81  4676   595.6   3.90  0.0265   4.25
+53    7.4  77  4193  1762.2   0.90  0.0420   8.50
+55    6.4  76  3779  1419.7   0.70  0.0326   5.04
+64    6.0  83  4534   542.7   3.30  0.0000   8.31
+66    6.0  81  3592   467.8   1.30  0.0430   4.90
+74   13.4  61  1888   432.5   1.70  0.0012   3.89
+78    5.7  74  2444   880.6  28.70  0.0009   6.48
+105  16.6  78  5528  1361.0   6.20  0.0000   7.49
+113  26.6  90  4222  2096.0   5.00  0.0000  23.83
+122  24.8  75  3101   564.0   2.10  0.0000   2.38
+125  11.1  63  2111   334.0   1.18  0.0000   2.09
+132   8.8  52   876   738.0   9.10  0.0000   1.66
+153  17.7  79  5764  1490.0   0.80  0.0000   4.39
+156 -16.6  71     0   175.0   3.00  0.0000   1.81
+163  -0.9  77     0   604.0   3.00  0.0000   4.30
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+30   11.4  81  5210   841.0  11.10  0.0278   7.63
+52    7.5  69  2827   680.0   2.90  0.0136   3.53
+58    7.0  70  2580   577.0   5.70  0.0430   4.54
+60    7.6  78  3959   531.0  19.60  0.0000   9.76
+63    7.5  73  3160   580.6   3.40  0.0231   3.53
+72   14.0  64  2275   785.0   3.30  0.0000   3.37
+99   22.1  75  5545  1720.0   5.00  0.0000   8.50
+103  17.0  78  5195  1178.0   6.22  0.0000   5.54
+109  19.6  75  5676  1034.0  48.80  0.0000   6.98
+112  25.9  77  1507  1392.0   5.00  0.0000  11.52
+115  11.4  90  8760  1800.0   0.56  0.0000  25.78
+119  27.0  76  2891   900.0   0.33  0.0000  25.56
+127  17.0  63  2646   521.0   5.70  0.0000   1.51
+135  16.0  62  2523   743.0  15.60  0.0000   5.83
+136  14.8  66  2523   747.0   7.70  0.0000   5.98
+149  25.8  83  5790  1158.0   5.00  0.0000   7.49
+151  16.6  73  4976  1324.0   0.80  0.0000   3.74
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+13    5.6  79  3446   754.6   2.30  0.0231   5.18
+18    3.9  83  3324   675.4   0.80  0.0247   4.61
+28   11.7  80  4940   697.6  20.30  0.0366   6.62
+34   11.5  77  4040   644.5  25.60  0.0420   9.72
+37    8.0  82  4989  1491.5   9.40  0.0000   8.35
+47   11.1  77  4424   608.8  10.30  0.0106  10.22
+67    6.8  82  4118   525.2   1.10  0.0278   6.05
+87   16.3  66  3026  1106.7   9.20  0.0358  12.46
+92   11.8  65  1532   729.4  43.10  0.0941   7.34
+94   16.7  75  5063  1729.0  10.00  0.0000   8.06
+101  20.0  49   850   111.0   5.00  0.0000   0.94
+106  21.2  75  4222   996.0   1.67  0.0000   4.32
+114   9.6  98  8760  1800.0   0.56  0.0000  24.48
+133   6.9  52   876   624.0   8.90  0.0000   1.22
+143  18.0  60  2646   374.0  14.60  0.0000   7.06
+147  12.2  67  2689   672.0   0.00  0.0000   2.88
+150  16.8  74  5133  1182.0   0.60  0.0000   4.03
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+5     7.4  76  3405  703.4  25.6  0.0450   7.99
+8     9.6  73  2480  426.4  83.3  0.0000  16.41
+..    ...  ..   ...    ...   ...     ...    ...
+165   3.6  67     0  595.0   3.0  0.0000   4.32
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+    CR
+3     9.8  77  3529   581.1  32.10  0.0342  5.69
+4     7.0  77  3011   850.2  19.70  0.0000  8.95
+6     6.6  73  2981   921.0  17.90  0.1921  6.77
+7     7.2  74  3063   941.2  12.20  0.0366  3.46
+23    8.9  81  4382   624.4   8.20  0.0342  9.07
+69   15.2  56  1160   331.5  15.30  0.0073  4.82
+82    5.5  75  3252   961.1   3.30  0.0000  9.88
+95   17.1  72  4222   983.0  10.00  0.0000  7.56
+98   20.9  74  5528  2624.0   5.00  0.0000  8.42
+100  18.0  51   999    35.0   5.00  0.0000  2.02
+121  26.9  82  5790   635.0   2.72  0.0000  1.15
+123  12.0  69  3364   652.0   1.18  0.0000  3.02
+130  15.0  59  1104   258.0   5.40  0.0000  0.65
+137  15.4  64  2523   747.0  17.50  0.0000  5.83
+140  21.0  56  1752  1372.0   7.10  0.0000  6.84
+158 -12.0  72     0   376.0   3.00  0.0000  1.69
+170   9.0  81     0   700.0   3.00  0.0000  7.03
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+165   3.6  67     0  595.0   3.0  0.0000   4.32
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+9     9.9  72  2056   416.6  78.40  0.0242  11.59
+11    9.7  75  2759   512.7  49.20  0.0567  12.17
+31   12.0  76  4107   696.6  48.50  0.0253  10.66
+42   10.9  79  4482   705.9   8.50  0.0046   8.14
+44   10.3  83  5358   987.1   4.70  0.0366   4.75
+90   12.3  67  2111   733.1  58.10  0.0000  13.61
+104  16.7  77  4949  1263.0   8.21  0.0000   6.70
+107  19.7  75  5676  1409.0  67.20  0.0000   8.57
+108  19.5  76  5676  1810.0  66.80  0.0000  10.66
+117  27.0  76  2891   900.0   0.33  0.0000  18.65
+138  21.0  56  1664  1352.0   6.70  0.0000   8.35
+144  16.4  37    26    17.0   5.00  0.0000   1.66
+152  16.7  76  4792  1306.0   0.80  0.0000   4.10
+155 -12.2  80     0   218.0   3.00  0.0000   1.64
+157 -11.0  70     0   317.0   5.00  0.0000   2.91
+160  -6.5  72     0   525.0   5.00  0.0000   5.30
+166  -0.7  76     0   558.0  10.00  0.0000   6.35
+Train Data:         T  RH   TOW   Prec   SO2      H+     CR
+0     9.5  79  2830  639.3  77.5  0.0000  14.89
+1    10.3  74  2555  380.8  58.1  0.0221   6.98
+2     9.1  73  2627  684.3  41.2  0.0714   7.78
+3     9.8  77  3529  581.1  32.1  0.0342   5.69
+4     7.0  77  3011  850.2  19.7  0.0000   8.95
+..    ...  ..   ...    ...   ...     ...    ...
+166  -0.7  76     0  558.0  10.0  0.0000   6.35
+167 -15.5  68     0  306.0   3.0  0.0000   1.24
+168  -0.4  71     0  403.0   4.0  0.0000   3.84
+169   5.0  79     0  570.0  14.0  0.0000   7.41
+170   9.0  81     0  700.0   3.0  0.0000   7.03
+
+[154 rows x 7 columns] Test Data:         T  RH   TOW    Prec    SO2      H+     CR
+5     7.4  76  3405   703.4  25.60  0.0450   7.99
+25   12.2  67  2541   655.4  14.20  0.0411   4.68
+35   10.1  79  4120   683.6  22.90  0.0253  11.45
+41    9.9  83  5459   904.2  10.10  0.0000   9.93
+45   11.0  81  4969   569.1   9.90  0.0049   9.07
+57    8.7  70  3074   473.2   8.40  0.0366   6.12
+75   14.8  57  1465   327.4   4.20  0.0006   1.66
+76    5.5  73  2084   575.4  19.20  0.0000  10.32
+77    5.7  76  2894   860.2  30.80  0.0006   8.64
+80    5.5  83  4092   447.8   0.90  0.0000   7.18
+81    6.7  81  4332   532.7   0.60  0.0226   9.43
+84    4.3  80  3302  1080.0   2.10  0.0482   5.26
+93   11.8  69     0   756.8  38.30  0.0765   5.26
+116  13.5  81  8760  1800.0   0.56  0.0000  20.88
+120  26.1  71  4853   936.0   4.20  0.0000   1.08
+131  15.6  58  2400   266.0   2.80  0.0000   0.65
+161   1.4  69     0   272.0   3.00  0.0000   2.03
+Code completed in 0.373 seconds.
+----
+
+
++*In[66]:*+
+[source, ipython3]
+----
+from yellowbrick.regressor import ResidualsPlot
+# Residuals Data Plot of CR
+tic = time.perf_counter() # start timer
+
+# visualize the residuals of prediction
+visualizer = ResidualsPlot(XGB)
+visualizer.fit(X_train, y_train)
+visualizer.score(X_test, y_test)
+
+plt.xlabel('Predicted Value')
+plt.ylabel('Residuals')
+
+visualizer.show()
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*Out[66]:*+
+----
+![png](output_11_0.png)
+
+Code completed in 0.833 seconds.
+----
+
+
++*In[67]:*+
+[source, ipython3]
+----
+# Parity Plot
+tic = time.perf_counter() # start timer
+
+# define the predictive function using cross validation
+predicted = cross_val_predict(XGB, fitur, target, cv=kfd)
+
+# create parity plot of the result
+fig, ax=plt.subplots()
+ax.scatter(target, predicted)
+ax.plot([target.min(), target.max()], [target.min(), target.max()], '-k')
+
+ax.set_title('CR Prediction using XGBoost Regression Model')
+ax.set_xlabel('Measured Values')
+ax.set_ylabel('Predicted Values')
+
+plt.show()
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*Out[67]:*+
+----
+![png](output_12_0.png)
+
+Code completed in 2.802 seconds.
+----
+
+
++*In[51]:*+
+[source, ipython3]
+----
+# Model Accuracy
+
+tic = time.perf_counter() # start timer
+
+target_pred = XGB.predict(X_test)
+print('R^2:', metrics.r2_score(y_test,target_pred))
+print('MAE:', metrics.mean_absolute_error(y_test,target_pred))
+print('MSE:', metrics.mean_squared_error(y_test,target_pred))
+print('RMSE:', np.sqrt(metrics.mean_squared_error(y_test,target_pred)))
+print('Max error:', metrics.max_error(y_test,target_pred))
+
+toc = time.perf_counter() # stop timer
+print(f"Code completed in {toc - tic:0.3f} seconds.")
+----
+
+
++*Out[51]:*+
+----
+R^2: 0.933399695356755
+MAE: 1.0172050273430053
+MSE: 1.513576636803776
+RMSE: 1.2302750248638619
+Max error: 2.5721581649780276
+Code completed in 0.010 seconds.
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# Visualisasi Desicision Tree
+# define the feature names to be captioned in each nodes of the tree
+fitur2=kevin.drop('Ln(Kp)', axis=1)
+fitur_list= list(fitur2.columns)
+fitur2=py.array(kevin)
+
+# create the tree and export it into dot file
+tree = GB.estimators_[50,0]
+GB.fit(X_train, y_train)
+export_graphviz(tree,
+                out_file='Decision Tree GB (n=50).dot',
+                max_depth=None, # utk mempersingkat visualisasi. cocok dilampirkan di dalam draft word .docx
+                feature_names=fitur_list,
+                node_ids=True,
+                rotate=False,
+                rounded=True,
+                precision=3,
+               )
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# export tree.dot into an image
+
+(graph,) = pydot.graph_from_dot_file('Decision Tree GB (n=50).dot')
+graph.write_png('Decision Tree GB (n=50).png')
+----
+
+
++*In[52]:*+
+[source, ipython3]
+----
+# Predicting for new location
+
+XGB=XGBRegressor(n_estimators=750,
+                 random_state=715,
+                 learning_rate=0.08,
+                 max_depth=3,
+                 min_child_weight=1,
+                 gamma=0.5,
+                 reg_alpha=1,
+                 subsample=0.5,
+                 reg_lambda=1,
+                 )
+
+XGB.fit(X_train, y_train)
+
+try_pred = XGB.predict(X_test)
+----
+
+
++*In[53]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.1')
+dataset_1=pd.DataFrame({'T':[9.5], 'RH':[79],'TOW':[2830], 'Prec':[639.3], 'SO2':[77.5], 'H+':[0]})
+dataset_1
+----
+
+
++*Out[53]:*+
+----
+Test based on dataset No.1
+
+[cols=",,,,,,",options="header",]
+|===
+| |T |RH |TOW |Prec |SO2 |H+
+|0 |9.5 |79 |2830 |639.3 |77.5 |0
+|===
+----
+
+
++*In[54]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.1 CR = 14.89 g/mm2')
+try_pred = XGB.predict(dataset_1)
+print('CR with model predict dataset_1:', try_pred, 'g/mm2')
+----
+
+
++*Out[54]:*+
+----
+Test based on dataset No.1 CR = 14.89 g/mm2
+CR with model predict dataset_1: [14.978112] g/mm2
+----
+
+
++*In[57]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.30')
+dataset_30=pd.DataFrame({'T':[10.7], 'RH':[79],'TOW':[4437], 'Prec':[619.1], 'SO2':[16.3], 'H+':[0.0291]})
+dataset_30
+----
+
+
++*Out[57]:*+
+----
+Test based on dataset No.30
+
+[cols=",,,,,,",options="header",]
+|===
+| |T |RH |TOW |Prec |SO2 |H+
+|0 |10.7 |79 |4437 |619.1 |16.3 |0.0291
+|===
+----
+
+
++*In[59]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.30 CR = 9.07 g/mm2')
+try_pred = XGB.predict(dataset_30)
+print('CR with model predict dataset_30:', try_pred, 'g/mm2')
+----
+
+
++*Out[59]:*+
+----
+Test based on dataset No.30 CR = 9.07 g/mm2
+CR with model predict dataset_30: [8.825036] g/mm2
+----
+
+
++*In[60]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.50')
+dataset_50=pd.DataFrame({'T':[11.1], 'RH':[82],'TOW':[5142], 'Prec':[789.9], 'SO2':[5.8], 'H+':[0.0038]})
+dataset_50
+----
+
+
++*Out[60]:*+
+----
+Test based on dataset No.50
+
+[cols=",,,,,,",options="header",]
+|===
+| |T |RH |TOW |Prec |SO2 |H+
+|0 |11.1 |82 |5142 |789.9 |5.8 |0.0038
+|===
+----
+
+
++*In[61]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.50 CR = 6.34 g/mm2')
+try_pred = XGB.predict(dataset_50)
+print('CR with model predict dataset_30:', try_pred, 'g/mm2')
+----
+
+
++*Out[61]:*+
+----
+Test based on dataset No.50 CR = 6.34 g/mm2
+CR with model predict dataset_30: [6.76453] g/mm2
+----
+
+
++*In[62]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.165')
+dataset_165=pd.DataFrame({'T':[2.5], 'RH':[70],'TOW':[0], 'Prec':[626], 'SO2':[3], 'H+':[0]})
+dataset_165
+----
+
+
++*Out[62]:*+
+----
+Test based on dataset No.165
+
+[cols=",,,,,,",options="header",]
+|===
+| |T |RH |TOW |Prec |SO2 |H+
+|0 |2.5 |70 |0 |626 |3 |0
+|===
+----
+
+
++*In[63]:*+
+[source, ipython3]
+----
+print('Test based on dataset No.165 CR = 4.64 g/mm2')
+try_pred = XGB.predict(dataset_165)
+print('CR with model predict dataset_30:', try_pred, 'g/mm2')
+----
+
+
++*Out[63]:*+
+----
+Test based on dataset No.165 CR = 4.64 g/mm2
+CR with model predict dataset_30: [4.496938] g/mm2
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# PREDICTION NEW DATA
+
+# 1 - Jakarta ('')
+print('Hasil CR = 2.736 dan Kp = 15.432 mg2/m4.s')
+
+#                        T, RH, TOW, Prec, SO2, H+
+try_pred = XGB.predict([[10.7,79,4437,619.1,16.3,0.0291]])
+print("CR:", try_pred), 'g/mm2')
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# 2 - Bandung ('')
+print('Hasil CR = 2.736 dan Kp = 15.432 mg2/m4.s')
+
+#                        T, RH, TOW, Prec, SO2, H+
+try_pred = XGB.predict([[10.7,79,4437,619.1,16.3,0.0291]])
+print("CR:", try_pred), 'g/mm2')
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+# 2 - Bekasi ('')
+print('Hasil CR = 2.736 dan Kp = 15.432 mg2/m4.s')
+
+#                        T, RH, TOW, Prec, SO2, H+
+try_pred = XGB.predict([[10.7,79,4437,619.1,16.3,0.0291]])
+print("CR:", try_pred), 'g/mm2')
+----
